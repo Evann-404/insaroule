@@ -28,6 +28,7 @@ uv run pre-commit install
 ## Setup the PostgreSQL database
 This project relies on PostgreSQL with PostGIS for spatial data handling. You need to have PostgreSQL and PostGIS installed on your machine. To do so, you need to install the following packages using your package manager:
 
+**On Debian/Ubuntu:**
 ```bash
 sudo apt install \                                                 
     postgresql-16 \        
@@ -35,11 +36,29 @@ sudo apt install \
     postgresql-server-dev-16
 ```
 
+**On Fedora/Red Hat:**
+ 
+```bash
+sudo dnf install postgresql-server postgresql-contrib postgis
+sudo postgresql-setup --initdb
+sudo systemctl enable postgresql
+sudo systemctl start postgresql
+```
+
 Log into the PostgreSQL database as the `postgres` user and create a new database `insaroule`: 
 
+**On Debian/Ubuntu:**
+ 
 ```bash
 sudo -i -u postgres
 createdb insaroule
+```
+ 
+**On Fedora/Red Hat:**
+ 
+```bash
+sudo -u postgres createdb insaroule
+sudo -u postgres psql
 ```
 While you are logged in as the `postgres` user, you will also create a user `insaroule_user` with password `insaroule_password` to access the database. You can do this by running the following commands in the PostgreSQL shell (by running `psql` command):
 
@@ -92,6 +111,8 @@ uv run poe migrate
 This project uses Redis to handle background tasks and chat messages. You need to have Redis installed and running on your machine.
 
 You can install Redis using your package manager. For example, on Ubuntu, you can run the following commands:
+
+**On Debian/Ubuntu:**
 ```bash
 sudo apt-get install lsb-release curl gpg
 curl -fsSL https://packages.redis.io/gpg | sudo gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
@@ -99,7 +120,19 @@ sudo chmod 644 /usr/share/keyrings/redis-archive-keyring.gpg
 echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/redis.list
 sudo apt-get update
 sudo apt-get install redis
+sudo systemctl enable redis-server
+sudo systemctl start redis-server
 ```
+ 
+**On Fedora/Red Hat:**
+ 
+```bash
+sudo dnf install redis
+sudo systemctl enable redis
+sudo systemctl start redis
+```
+ 
+> **Note Fedora/Red Hat:** The package may be provided as `valkey-compat-redis` depending on your Fedora version. In all cases, the systemd service is called `redis` (not `redis-server` as on Ubuntu).
 
 Redis will start automatically, and it should restart at boot time. If Redis doesn't start across reboots, you may need to manually enable it:
 
@@ -192,8 +225,16 @@ NB: To run `act` you need to have Docker installed and running on your machine. 
 ## Translations
 You need first to install GNU gettext tools to work with translations. You can install it using your package manager. For example, on Ubuntu, you can run the following command:
 
+**On Debian/Ubuntu:**
+ 
 ```bash
 sudo apt-get install gettext
+```
+ 
+**On Fedora/Red Hat:**
+ 
+```bash
+sudo dnf install gettext
 ```
 
 You can update the translation files by running the following command:

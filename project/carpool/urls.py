@@ -54,4 +54,19 @@ urlpatterns += [
         bo_views.statistics_json_monthly,
         name="bo_statistics_json_monthly",
     ),
+    path(
+        "back-office/organization/",
+        bo_views.organization_statistics_dashboard,
+        name="bo_organization_dashboard",
+    ),
+    path(
+        "back-office/organization/<int:organization_id>/",
+        bo_views.organization_statistics,
+        name="bo_organization_statistics",
+    ),
+    path(
+        "back-office/organization/<int:organization_id>/json/",
+        bo_views.organization_statistics_json_monthly,
+        name="bo_organization_statistics_json",
+    ),
 ]

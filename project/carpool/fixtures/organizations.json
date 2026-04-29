@@ -1,0 +1,29 @@
+[
+  {
+    "model": "carpool.organization",
+    "pk": 1,
+    "fields": {
+      "name": "INSA Rennes",
+      "email_domain": "insa-rennes.fr",
+      "admins": [1, 2]
+    }
+  },
+  {
+    "model": "carpool.organization",
+    "pk": 2,
+    "fields": {
+      "name": "Université de Rennes",
+      "email_domain": "univ-rennes.fr",
+      "admins": [3]
+    }
+  },
+  {
+    "model": "carpool.organization",
+    "pk": 3,
+    "fields": {
+      "name": "École Polytechnique",
+      "email_domain": "polytechnique.edu.fr",
+      "admins": [4]
+    }
+  }
+]

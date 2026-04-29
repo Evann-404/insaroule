@@ -1,0 +1,58 @@
+{% extends 'base.html' %}{% load static i18n %}
+
+{% block extrahead %}
+<link rel="stylesheet" href="{% static 'vendors/bootstrap-icons/bootstrap-icons.css' %}" />
+{% endblock extrahead %}
+
+{% block content %}
+<div class="container mt-3">
+    <h1>{% translate "Organization Back-Office" %}</h1>
+    
+    {% if organizations %}
+    <div class="row mt-4">
+        {% for organization in organizations %}
+        <div class="col-md-6 mb-3">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">{{ organization.name }}</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>{% translate "Email domain:" %}</strong> {{ organization.email_domain }}</p>
+                    <p><strong>{% translate "Admins:" %}</strong> {{ organization.admins.count }}</p>
+                    
+                    {% if organization.statistics %}
+                    <div class="row mt-3">
+                        <div class="col-6">
+                            <small class="text-muted">{% translate "Users" %}</small>
+                            <p class="mb-0"><strong>{{ organization.statistics.total_users }}</strong></p>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">{% translate "Rides" %}</small>
+                            <p class="mb-0"><strong>{{ organization.statistics.total_rides }}</strong></p>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">{% translate "Distance (km)" %}</small>
+                            <p class="mb-0"><strong>{{ organization.statistics.total_distance|floatformat:2 }}</strong></p>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">{% translate "CO₂ Saved (kg)" %}</small>
+                            <p class="mb-0"><strong>{{ organization.statistics.total_co2|floatformat:2 }}</strong></p>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <a href="{% url 'carpool:bo_organization_statistics' organization.id %}" class="btn btn-primary btn-sm mt-3">
+                        {% translate "View Details" %}
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info mt-4" role="alert">
+        {% translate "You are not an admin of any organization." %}
+    </div>
+    {% endif %}
+</div>
+{% endblock content %}

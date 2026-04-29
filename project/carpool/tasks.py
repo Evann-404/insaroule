@@ -57,7 +57,7 @@ def get_autocompletion(query):
             geocoding_results = data["results"]
             if geocoding_results:
                 for geocoding_result in geocoding_results:
-                    content =  {
+                    content = {
                         "fulltext": geocoding_result["fulltext"],
                         "value": f"{geocoding_result['y']}/{geocoding_result['x']}",
                         "customProperties": {
@@ -70,7 +70,11 @@ def get_autocompletion(query):
                     }
 
                     # Prioritize exact city results matching the query
-                    if geocoding_result.get("street", "") == "" and geocoding_result.get("city", "").lower().startswith(query.lower()):
+                    if geocoding_result.get(
+                        "street", ""
+                    ) == "" and geocoding_result.get("city", "").lower().startswith(
+                        query.lower()
+                    ):
                         result.insert(0, content)
                     else:
                         result.append(content)
@@ -303,6 +307,138 @@ def compute_daily_statistics():
     logger.info(
         "Monthly statistics updated successfully for %d-%d", now.year, now.month
     )
+
+    # --- Organization Statistics ---
+    compute_organization_statistics()
+
+
+def compute_organization_statistics():
+    """
+    Compute statistics for each organization.
+    This calculates overall and monthly statistics for organizations.
+    """
+    from carpool.models.statistics import (
+        Organization,
+        OrganizationStatistics,
+        OrganizationMonthlyStatistics,
+    )
+
+    logger.info("Computing organization statistics")
+
+    for organization in Organization.objects.all():
+        logger.info(f"Computing stats for organization: {organization.name}")
+
+        # Get all users belonging to this organization
+        User = get_user_model()
+        org_users = User.objects.filter(email__endswith=f"@{organization.email_domain}")
+
+        # Get all rides where the driver belongs to this organization
+        org_rides = (
+            Ride.objects.filter(driver__in=org_users)
+            .annotate(
+                distance_km=ExpressionWrapper(
+                    Length("geometry", spheroid=True) / 1000.0,
+                    output_field=FloatField(),
+                ),
+                rider_count=Count("rider", distinct=True),
+            )
+            .annotate(
+                effective_co2_per_km=Case(
+                    When(
+                        Q(vehicle__geqCO2_per_km__isnull=True)
+                        | Q(vehicle__geqCO2_per_km=0),
+                        then=Value(settings.AVERAGE_CO2_EMISSION_PER_KM),
+                    ),
+                    default=F("vehicle__geqCO2_per_km"),
+                    output_field=FloatField(),
+                ),
+            )
+            .annotate(
+                spared_co2_kg=ExpressionWrapper(
+                    F("rider_count")
+                    * F("distance_km")
+                    * F("effective_co2_per_km")
+                    / 1000,
+                    output_field=FloatField(),
+                )
+            )
+        )
+
+        totals = org_rides.aggregate(
+            total_distance=Sum("distance_km"),
+            total_co2=Sum("spared_co2_kg"),
+        )
+
+        total_org_rides = org_rides.count()
+        total_org_users = org_users.count()
+        total_org_distance = totals["total_distance"] or 0.0
+        total_org_co2 = totals["total_co2"] or 0.0
+
+        logger.info(
+            f"Organization {organization.name}: {total_org_rides} rides, {total_org_users} users, {total_org_distance:.2f} km, {total_org_co2:.2f} kg CO2"
+        )
+
+        # Update or create OrganizationStatistics
+        org_stats, created = OrganizationStatistics.objects.get_or_create(
+            organization=organization,
+        )
+        org_stats.total_rides = total_org_rides
+        org_stats.total_users = total_org_users
+        org_stats.total_distance = total_org_distance
+        org_stats.total_co2 = total_org_co2
+        org_stats.save()
+
+        # Update monthly statistics for the organization
+        now = timezone.now()
+        current_month_org_rides = (
+            org_rides.filter(start_dt__year=now.year, start_dt__month=now.month)
+            .annotate(
+                effective_co2_per_km=Case(
+                    When(
+                        Q(vehicle__geqCO2_per_km__isnull=True)
+                        | Q(vehicle__geqCO2_per_km=0),
+                        then=Value(settings.AVERAGE_CO2_EMISSION_PER_KM),
+                    ),
+                    default=F("vehicle__geqCO2_per_km"),
+                    output_field=FloatField(),
+                ),
+            )
+            .annotate(
+                spared_co2_kg=ExpressionWrapper(
+                    Count("rider", distinct=True)
+                    * F("distance_km")
+                    * F("effective_co2_per_km")
+                    / 1000,
+                    output_field=FloatField(),
+                )
+            )
+        )
+
+        month_totals = current_month_org_rides.aggregate(
+            total_distance=Sum("distance_km"),
+            total_co2=Sum("spared_co2_kg"),
+        )
+
+        month_stats, created = OrganizationMonthlyStatistics.objects.get_or_create(
+            organization=organization,
+            month=now.month,
+            year=now.year,
+            defaults={
+                "total_rides": 0,
+                "total_users": 0,
+                "total_distance": 0.0,
+                "total_co2": 0.0,
+            },
+        )
+        month_stats.total_rides = current_month_org_rides.count()
+        month_stats.total_users = total_org_users
+        month_stats.total_distance = month_totals["total_distance"] or 0.0
+        month_stats.total_co2 = month_totals["total_co2"] or 0.0
+        month_stats.save()
+
+        logger.info(
+            f"Organization {organization.name} monthly stats updated for {now.year}-{now.month}"
+        )
 
 
 @shared_task

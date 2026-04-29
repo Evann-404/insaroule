@@ -1,0 +1,157 @@
+{% extends 'base.html' %}{% load static i18n %}
+
+{% block extrahead %}
+<link rel="stylesheet" href="{% static 'vendors/bootstrap-icons/bootstrap-icons.css' %}" />
+{% endblock extrahead %}
+
+{% block content %}
+<div class="container mt-3">
+    <div class="d-flex flex-row justify-content-between align-items-center mb-3">
+        <div>
+            <a href="{% url 'carpool:bo_organization_dashboard' %}" class="btn btn-secondary btn-sm">
+                <i class="bi bi-chevron-left"></i> {% translate "Back" %}
+            </a>
+            <h1 class="d-inline ms-3">{{ organization.name }} - {% translate "Statistics" %}</h1>
+        </div>
+        <span class="text-body-secondary"><small>{% translate "Last updated:" %} {{ last_updated_at|date:"d/m/Y H:i" }}</small></span>
+    </div>
+    
+    <div class="row">
+        <div class="col-xl col-md-6 mb-3">
+            <div class="card border border-5 border-primary border-end-0 border-top-0 border-bottom-0 shadow py-2 h-100">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs fw-bold text-primary text-uppercase mb-1">
+                                {% translate "Total Rides" %}
+                            </div>
+                            <div class="h5 mb-0 fw-bold text-body-secondary">{{ stats.total_rides|default:0 }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-car-front-fill text-body-tertiary display-5 pe-3"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl col-md-6 mb-3">
+            <div class="card border border-5 border-warning border-end-0 border-top-0 border-bottom-0 shadow py-2 h-100">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs fw-bold text-warning text-uppercase mb-1">
+                                {% translate "Total Users" %}
+                            </div>
+                            <div class="h5 mb-0 fw-bold text-body-secondary">{{ stats.total_users|default:0 }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-people-fill text-body-tertiary display-5 pe-3"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl col-md-6 mb-3">
+            <div class="card border border-5 border-info border-end-0 border-top-0 border-bottom-0 shadow py-2 h-100">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs fw-bold text-info text-uppercase mb-1">
+                                {% translate "Total Distance (km)" %}
+                            </div>
+                            <div class="h5 mb-0 fw-bold text-body-secondary">{{ stats.total_distance|floatformat:2|default:0 }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-signpost-split-fill text-body-tertiary display-5 pe-3"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl col-md-6 mb-3">
+            <div class="card border border-5 border-success border-end-0 border-top-0 border-bottom-0 shadow py-2 h-100">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs fw-bold text-success text-uppercase mb-1">
+                                {% translate "Spared CO2 (kg)" %}
+                            </div>
+                            <div class="h5 mb-0 fw-bold text-body-secondary">{{ stats.total_co2|floatformat:2|default:0 }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-leaf-fill text-body-tertiary display-5 pe-3"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt-4 shadow">
+        <div class="card-header">
+            <h5 class="mb-0">{% translate "Monthly Statistics" %}</h5>
+        </div>
+        <div class="card-body">
+            <canvas id="chart"></canvas>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extrascript %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const ctx = document.getElementById('chart');
+
+    document.addEventListener("DOMContentLoaded", function () {
+        fetch("{% url 'carpool:bo_organization_statistics_json' organization.id %}")
+            .then(response => response.json())
+            .then(data => {
+                const chart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.labels,
+                        datasets: [
+                            {
+                                label: '{% translate "Rides" %}',
+                                data: data.monthly_total_rides,
+                                backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                borderWidth: 1
+                            },
+                            {
+                                label: '{% translate "Users" %}',
+                                data: data.monthly_total_users,
+                                backgroundColor: 'rgba(255, 159, 64, 0.7)',
+                                borderColor: 'rgba(255, 159, 64, 1)',
+                                borderWidth: 1
+                            },
+                            {
+                                label: '{% translate "Distance (km)" %}',
+                                data: data.monthly_total_distance,
+                                backgroundColor: 'rgba(153, 102, 255, 0.7)',
+                                borderColor: 'rgba(153, 102, 255, 1)',
+                                borderWidth: 1
+                            },
+                            {
+                                label: '{% translate "CO2 (kg)" %}',
+                                data: data.monthly_total_co2,
+                                backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                borderWidth: 1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            });
+    });
+</script>
+{% endblock extrascript %}

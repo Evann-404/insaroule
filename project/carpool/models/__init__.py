@@ -2,6 +2,12 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from carpool.models.statistics import (
+    Organization,
+    OrganizationMonthlyStatistics,
+    OrganizationStatistics,
+)
+
 
 class Location(models.Model):
     fulltext = models.CharField(
@@ -105,3 +111,13 @@ class Vehicle(models.Model):
         null=True,
         blank=True,
     )
+
+
+__all__ = [
+    "Location",
+    "Step",
+    "Vehicle",
+    "Organization",
+    "OrganizationMonthlyStatistics",
+    "OrganizationStatistics",
+]

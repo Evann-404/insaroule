@@ -2,7 +2,13 @@ from django.contrib import admin
 
 from carpool.models import Location, Step, Vehicle
 from carpool.models.ride import Ride
-from carpool.models.statistics import Statistics, MonthlyStatistics
+from carpool.models.statistics import (
+    Statistics,
+    MonthlyStatistics,
+    Organization,
+    OrganizationStatistics,
+    OrganizationMonthlyStatistics,
+)
 from carpool.models.reservation import Reservation
 from carpool.tasks import send_email_suggest_ride_sharing
 
@@ -12,6 +18,32 @@ admin.site.register(Location)
 admin.site.register(Step)
 
 admin.site.register(Statistics)
+
+
+@admin.register(Organization)
+class OrganizationAdmin(admin.ModelAdmin):
+    list_display = ("name", "email_domain", "get_admin_count")
+    search_fields = ("name", "email_domain")
+    filter_horizontal = ("admins",)
+
+    def get_admin_count(self, obj):
+        return obj.admins.count()
+
+    get_admin_count.short_description = "Number of Admins"
+
+
+@admin.register(OrganizationStatistics)
+class OrganizationStatisticsAdmin(admin.ModelAdmin):
+    list_display = (
+        "organization",
+        "total_users",
+        "total_rides",
+        "total_distance",
+        "total_co2",
+        "updated_at",
+    )
+    search_fields = ("organization__name",)
+    readonly_fields = ("updated_at",)
 
 
 @admin.register(Reservation)
@@ -29,6 +61,20 @@ class VehicleAdmin(admin.ModelAdmin):
 @admin.register(MonthlyStatistics)
 class MonthlyStatisticsAdmin(admin.ModelAdmin):
     list_display = ("month", "year", "total_rides", "total_distance", "total_co2")
+
+
+@admin.register(OrganizationMonthlyStatistics)
+class OrganizationMonthlyStatisticsAdmin(admin.ModelAdmin):
+    list_display = (
+        "organization",
+        "month",
+        "year",
+        "total_rides",
+        "total_distance",
+        "total_co2",
+    )
+    list_filter = ("organization", "year", "month")
+    search_fields = ("organization__name",)
 
 
 @admin.action(description="Suggest drivers to share their ride")
