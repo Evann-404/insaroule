@@ -38,6 +38,27 @@ class User(AbstractUser):
             return timezone.now() - self.last_verification_email_sent < cooldown
         return False
 
+    def get_organization(self):
+        """
+        Get the organization the user is part of based on their email domain.
+        Returns None if no organization matches the email domain.
+        """
+        from carpool.models.statistics import Organization
+
+        if not self.email:
+            return None
+
+        email_domain = self.email.split("@")[1]
+        try:
+            return Organization.objects.get(email_domain=email_domain)
+        except Organization.DoesNotExist:
+            return None
+
+    @property
+    def organization(self):
+        """Property to get organization."""
+        return self.get_organization()
+
 
 class UserNotificationPreferences(models.Model):
     class Meta:
