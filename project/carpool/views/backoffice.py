@@ -1,14 +1,27 @@
-from django.http import JsonResponse
-from django.shortcuts import render, get_object_or_404
+from datetime import timedelta
+
+from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import (
+    login_required,
+    permission_required,
+    user_passes_test,
+)
+from django.db.models import Count, Max, Sum
+from django.http import HttpResponseForbidden, JsonResponse
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
-from django.contrib.auth.decorators import permission_required, login_required
-from django.contrib.auth.decorators import user_passes_test
+
+from carpool.models.ride import Ride
 from carpool.models.statistics import (
-    Statistics,
     MonthlyStatistics,
     Organization,
-    OrganizationStatistics,
     OrganizationMonthlyStatistics,
+    OrganizationStatistics,
+    Statistics,
+)
+from carpool.serializers import (
+    MonthlyStatisticsSerializer,
+    OrganizationMonthlyStatisticsSerializer,
 )
 
 
@@ -24,30 +37,21 @@ def is_admin_of_organization(user, organization):
 
 @permission_required(["carpool.view_statistics"])
 def statistics_json_monthly(request):
-    # Get labels for the current academic year (from September to August)
+    # Get statistics for the current calendar year
     now = timezone.now()
-    if now.month >= 9:
-        start_year = now.year
-    else:
-        start_year = now.year - 1
-    labels = []
-    for month in range(9, 13):
-        labels.append(f"{month:02d}-{start_year}")
-    for month in range(1, 9):
-        labels.append(f"{month:02d}-{start_year + 1}")
-    monthly_stats = MonthlyStatistics.objects.filter_by_academic_year(start_year)
-    monthly_total_rides = [stat.total_rides for stat in monthly_stats]
-    monthly_total_users = [stat.total_users for stat in monthly_stats]
-    monthly_total_distance = [stat.total_distance for stat in monthly_stats]
-    monthly_total_co2 = [stat.total_co2 for stat in monthly_stats]
+    current_year = now.year
 
-    data = {
-        "labels": labels,
-        "monthly_total_rides": monthly_total_rides,
-        "monthly_total_users": monthly_total_users,
-        "monthly_total_distance": monthly_total_distance,
-        "monthly_total_co2": monthly_total_co2,
-    }
+    monthly_stats = MonthlyStatistics.objects.filter(year=current_year)
+
+    # Use new serializer format with calendar year indexing (0=January, 11=December)
+    data = MonthlyStatisticsSerializer.serialize_statistics_json(
+        current_year, monthly_stats
+    )
+
+    # Add legacy format for backward compatibility
+    data["legacy"] = MonthlyStatisticsSerializer.serialize_statistics_legacy(
+        monthly_stats
+    )
 
     return JsonResponse(data)
 
@@ -123,44 +127,110 @@ def organization_statistics(request, organization_id):
 def organization_statistics_json_monthly(request, organization_id):
     """
     Return monthly statistics for an organization as JSON.
-    Used for displaying charts in the front-end.
+    Uses calendar year (January to December, indexed 0-11).
     """
     organization = get_object_or_404(Organization, pk=organization_id)
 
-    # Check if user is an admin of this organization
     if not is_admin_of_organization(request.user, organization):
-        from django.http import HttpResponseForbidden
-
         return HttpResponseForbidden("You don't have access to this organization")
 
-    # Get labels for the current academic year (from September to August)
     now = timezone.now()
-    if now.month >= 9:
-        start_year = now.year
-    else:
-        start_year = now.year - 1
+    current_year = now.year
 
-    labels = []
-    for month in range(9, 13):
-        labels.append(f"{month:02d}-{start_year}")
-    for month in range(1, 9):
-        labels.append(f"{month:02d}-{start_year + 1}")
-
-    monthly_stats = OrganizationMonthlyStatistics.objects.filter_by_academic_year(
-        organization, start_year
+    monthly_stats = OrganizationMonthlyStatistics.objects.filter(
+        organization=organization, year=current_year
     )
 
-    monthly_total_rides = [stat.total_rides for stat in monthly_stats]
-    monthly_total_users = [stat.total_users for stat in monthly_stats]
-    monthly_total_distance = [stat.total_distance for stat in monthly_stats]
-    monthly_total_co2 = [stat.total_co2 for stat in monthly_stats]
+    data = (
+        OrganizationMonthlyStatisticsSerializer.serialize_organization_statistics_json(
+            organization, current_year, monthly_stats
+        )
+    )
+
+    return JsonResponse(data)
+
+
+@login_required
+def organization_statistics_json_yearly(request, organization_id):
+    """
+    Return yearly aggregated statistics for an organization as JSON.
+    Aggregates monthly stats by year.
+    """
+    organization = get_object_or_404(Organization, pk=organization_id)
+
+    if not is_admin_of_organization(request.user, organization):
+        return HttpResponseForbidden("You don't have access to this organization")
+
+    yearly_qs = list(
+        OrganizationMonthlyStatistics.objects.filter(organization=organization)
+        .values("year")
+        .annotate(
+            rides=Sum("total_rides"),
+            rides_carpooled=Sum("total_rides_carpooled"),
+            users=Max("total_users"),
+            distance_km=Sum("total_distance"),
+            co2_kg=Sum("total_co2"),
+        )
+        .order_by("year")
+    )
 
     data = {
-        "labels": labels,
-        "monthly_total_rides": monthly_total_rides,
-        "monthly_total_users": monthly_total_users,
-        "monthly_total_distance": monthly_total_distance,
-        "monthly_total_co2": monthly_total_co2,
+        "labels": [str(y["year"]) for y in yearly_qs],
+        "datasets": {
+            "rides_proposed": [y["rides"] or 0 for y in yearly_qs],
+            "rides_carpooled": [y["rides_carpooled"] or 0 for y in yearly_qs],
+            "users": [y["users"] or 0 for y in yearly_qs],
+            "distance_km": [round(y["distance_km"] or 0, 2) for y in yearly_qs],
+            "co2_kg": [round(y["co2_kg"] or 0, 2) for y in yearly_qs],
+        },
     }
+    return JsonResponse(data)
 
+
+@login_required
+def organization_statistics_json_weekly(request, organization_id):
+    """
+    Return the last 12 weeks of ride statistics for an organization.
+    Computed on-the-fly from the Ride model.
+    """
+    from django.db.models.functions import TruncWeek
+
+    organization = get_object_or_404(Organization, pk=organization_id)
+
+    if not is_admin_of_organization(request.user, organization):
+        return HttpResponseForbidden("You don't have access to this organization")
+
+    User = get_user_model()
+    org_users = User.objects.filter(email__endswith=f"@{organization.email_domain}")
+    since = timezone.now() - timedelta(weeks=12)
+
+    base_qs = Ride.objects.filter(driver__in=org_users, start_dt__gte=since)
+
+    proposed_by_week = (
+        base_qs.annotate(week=TruncWeek("start_dt"))
+        .values("week")
+        .annotate(count=Count("uuid", distinct=True))
+        .order_by("week")
+    )
+
+    carpooled_by_week = (
+        base_qs.annotate(rider_count_a=Count("rider", distinct=True))
+        .filter(rider_count_a__gt=0)
+        .annotate(week=TruncWeek("start_dt"))
+        .values("week")
+        .annotate(count=Count("uuid", distinct=True))
+        .order_by("week")
+    )
+
+    proposed_dict = {r["week"]: r["count"] for r in proposed_by_week}
+    carpooled_dict = {r["week"]: r["count"] for r in carpooled_by_week}
+    all_weeks = sorted(set(list(proposed_dict.keys()) + list(carpooled_dict.keys())))
+
+    data = {
+        "labels": [w.strftime("S%W %d/%m/%Y") for w in all_weeks],
+        "datasets": {
+            "rides_proposed": [proposed_dict.get(w, 0) for w in all_weeks],
+            "rides_carpooled": [carpooled_dict.get(w, 0) for w in all_weeks],
+        },
+    }
     return JsonResponse(data)

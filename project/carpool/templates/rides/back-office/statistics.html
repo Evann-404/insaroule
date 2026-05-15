@@ -99,11 +99,50 @@
             .then(response => response.json())
             .then(data => {
                 console.log(data);
-                const labels = data.labels;
-                const rideCounts = data.monthly_total_rides;
-                const co2Saved = data.monthly_total_co2;
-                const usersCounts = data.monthly_total_users;
-                const distanceCounts = data.monthly_total_distance;
+                
+                let labels, rideCounts, co2Saved, usersCounts, distanceCounts;
+                
+                // Detect format version and extract data accordingly
+                if (data.meta && data.meta.version === "2.0" && data.data && data.data.months) {
+                    // New v2.0 format with calendar year and indexed months (0-11)
+                    labels = data.labels || [];
+                    const months = data.data.months;
+                    
+                    // Extract data from indexed months (0=January to 11=December)
+                    rideCounts = [];
+                    co2Saved = [];
+                    usersCounts = [];
+                    distanceCounts = [];
+                    
+                    for (let i = 0; i < 12; i++) {
+                        const monthData = months[String(i)];
+                        if (monthData) {
+                            rideCounts.push(monthData.rides || 0);
+                            co2Saved.push(monthData.co2_kg || 0);
+                            usersCounts.push(monthData.users || 0);
+                            distanceCounts.push(monthData.distance_km || 0);
+                        } else {
+                            rideCounts.push(0);
+                            co2Saved.push(0);
+                            usersCounts.push(0);
+                            distanceCounts.push(0);
+                        }
+                    }
+                } else if (data.legacy) {
+                    // Use legacy format if available
+                    labels = data.labels || [];
+                    rideCounts = data.legacy.monthly_total_rides || [];
+                    co2Saved = data.legacy.monthly_total_co2 || [];
+                    usersCounts = data.legacy.monthly_total_users || [];
+                    distanceCounts = data.legacy.monthly_total_distance || [];
+                } else {
+                    // Fallback to direct properties (old format)
+                    labels = data.labels || [];
+                    rideCounts = data.monthly_total_rides || [];
+                    co2Saved = data.monthly_total_co2 || [];
+                    usersCounts = data.monthly_total_users || [];
+                    distanceCounts = data.monthly_total_distance || [];
+                }
 
                 new Chart(ctx, {
                     type: 'bar',

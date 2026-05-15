@@ -143,6 +143,7 @@ class OrganizationMonthlyStatistics(models.Model):
     year = models.IntegerField()
     total_users = models.IntegerField(default=0)
     total_rides = models.IntegerField(default=0)
+    total_rides_carpooled = models.IntegerField(default=0)
     total_distance = models.FloatField(default=0.0)
     total_co2 = models.FloatField(default=0.0)
 

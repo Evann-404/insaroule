@@ -419,18 +419,32 @@ def compute_organization_statistics():
             total_co2=Sum("spared_co2_kg"),
         )
 
+        # Rides with at least one rider (carpooled) for current month
+        month_carpooled = (
+            Ride.objects.filter(
+                driver__in=org_users,
+                start_dt__year=now.year,
+                start_dt__month=now.month,
+            )
+            .annotate(rider_count_a=Count("rider", distinct=True))
+            .filter(rider_count_a__gt=0)
+            .count()
+        )
+
         month_stats, created = OrganizationMonthlyStatistics.objects.get_or_create(
             organization=organization,
             month=now.month,
             year=now.year,
             defaults={
                 "total_rides": 0,
+                "total_rides_carpooled": 0,
                 "total_users": 0,
                 "total_distance": 0.0,
                 "total_co2": 0.0,
             },
         )
         month_stats.total_rides = current_month_org_rides.count()
+        month_stats.total_rides_carpooled = month_carpooled
         month_stats.total_users = total_org_users
         month_stats.total_distance = month_totals["total_distance"] or 0.0
         month_stats.total_co2 = month_totals["total_co2"] or 0.0
